@@ -1,0 +1,214 @@
+-- create table for CovidDeaths
+CREATE TABLE CovidDeaths (
+    iso_code TEXT,
+    continent TEXT,
+    location TEXT,
+    date DATE,
+    population BIGINT,
+	total_cases BIGINT,
+    new_cases DOUBLE PRECISION,
+    new_cases_smoothed DOUBLE PRECISION,
+    total_deaths DOUBLE PRECISION,
+    new_deaths DOUBLE PRECISION,
+    new_deaths_smoothed DOUBLE PRECISION,
+    total_cases_per_million DOUBLE PRECISION,
+    new_cases_per_million DOUBLE PRECISION,
+    new_cases_smoothed_per_million DOUBLE PRECISION,
+    total_deaths_per_million DOUBLE PRECISION,
+    new_deaths_per_million DOUBLE PRECISION,
+    new_deaths_smoothed_per_million DOUBLE PRECISION,
+    reproduction_rate DOUBLE PRECISION,
+    icu_patients DOUBLE PRECISION,
+    icu_patients_per_million DOUBLE PRECISION,
+    hosp_patients DOUBLE PRECISION,
+    hosp_patients_per_million DOUBLE PRECISION,
+    weekly_icu_admissions DOUBLE PRECISION,
+    weekly_icu_admissions_per_million DOUBLE PRECISION,
+    weekly_hosp_admissions DOUBLE PRECISION,
+    weekly_hosp_admissions_per_million DOUBLE PRECISION
+);
+
+-- Create table for Covid Vaccniations
+CREATE TABLE covid_vaccinations (
+    iso_code TEXT,
+    continent TEXT,
+    location TEXT,
+    date DATE,
+    total_tests BIGINT,
+    new_tests BIGINT,
+    total_tests_per_thousand DOUBLE PRECISION,
+    new_tests_per_thousand DOUBLE PRECISION,
+    new_tests_smoothed DOUBLE PRECISION,
+    new_tests_smoothed_per_thousand DOUBLE PRECISION,
+    positive_rate DOUBLE PRECISION,
+    tests_per_case DOUBLE PRECISION,
+    tests_units TEXT,
+    total_vaccinations BIGINT,
+    people_vaccinated BIGINT,
+    people_fully_vaccinated BIGINT,
+    total_boosters BIGINT,
+    new_vaccinations BIGINT,
+    new_vaccinations_smoothed DOUBLE PRECISION,
+    total_vaccinations_per_hundred DOUBLE PRECISION,
+    people_vaccinated_per_hundred DOUBLE PRECISION,
+    people_fully_vaccinated_per_hundred DOUBLE PRECISION,
+    total_boosters_per_hundred DOUBLE PRECISION,
+    new_vaccinations_smoothed_per_million DOUBLE PRECISION,
+    new_people_vaccinated_smoothed BIGINT,
+    new_people_vaccinated_smoothed_per_hundred DOUBLE PRECISION,
+    stringency_index DOUBLE PRECISION,
+    population_density DOUBLE PRECISION,
+    median_age DOUBLE PRECISION,
+    aged_65_older DOUBLE PRECISION,
+    aged_70_older DOUBLE PRECISION,
+    gdp_per_capita DOUBLE PRECISION,
+    extreme_poverty DOUBLE PRECISION,
+    cardiovasc_death_rate DOUBLE PRECISION,
+    diabetes_prevalence DOUBLE PRECISION,
+    female_smokers DOUBLE PRECISION,
+    male_smokers DOUBLE PRECISION,
+    handwashing_facilities DOUBLE PRECISION,
+    hospital_beds_per_thousand DOUBLE PRECISION,
+    life_expectancy DOUBLE PRECISION,
+    human_development_index DOUBLE PRECISION,
+    excess_mortality_cumulative_absolute DOUBLE PRECISION,
+    excess_mortality_cumulative DOUBLE PRECISION,
+    excess_mortality DOUBLE PRECISION,
+    excess_mortality_cumulative_per_million DOUBLE PRECISION
+);
+
+/*
+Covid 19 Data Exploration
+
+Skills used:
+- Joins,
+- CTE's,
+- Temp Tables,
+- Windows Functions,
+- Aggregate Functions,
+- Creating Views,
+- Converting Data Types
+*/
+
+Select *
+From coviddeaths
+Where continent is not null
+order by 3,4
+
+-- Select Data that we are going to be using
+Select Location, date, total_cases, new_cases, total_deaths, population
+FROM coviddeaths
+order by 1,2
+
+-- Looking at Total Cases vs Total Deaths
+-- Shows likelihood of dying if you contract covid in your country
+Select Location, date, total_cases, total_deaths, (total_deaths / total_cases)*100 as DeathPercentage
+From coviddeaths
+Where location like '%Canada%'
+order by 1,2
+
+-- Looking at Total Cases vs Population
+-- Shows what percentage of population got covid
+Select Location, date, Population, total_cases, (total_cases/population)*100 as PercentPopulationInfected
+From coviddeaths
+--Where location like '%Canada%'
+order by 1,2
+
+-- Looking at Countries with Highest Infection Rate compared to Population
+Select Location, Population, MAX(total_cases) as HighestInfectionCount, MAX((total_cases/population))*100 as PercentPopulationInfected
+From coviddeaths
+Group by Location, Population
+order by PercentPopulationInfected desc
+
+-- Let's break things down by continent
+
+-- Showing Countries with Highest Death Count per population
+Select Location, MAX(cast(Total_deaths as int)) as TotalDeathCount
+From coviddeaths
+Where continent is not null 
+AND Total_deaths is not null
+Group by Location
+order by TotalDeathCount desc
+
+-- Highest death count by continent
+Select continent, MAX(cast(Total_deaths as int)) as TotalDeathCount
+From coviddeaths
+Where continent is not null
+Group by continent
+order by TotalDeathCount desc
+
+-- GLOBAL NUMBERS
+
+Select SUM(new_cases) as total_cases, 
+	SUM(cast(new_deaths as int)) as total_deaths, 
+	(SUM(cast(new_deaths as int))/SUM(New_Cases))*100 as DeathPercentage
+From coviddeaths
+where continent is not null
+--Group By date
+order by 1,2
+
+-- Looking at Total Population vs Vaccinations
+-- Shows Percentage of Population that has recieved at least one Covid Vaccine
+Select dea.continent, dea.location, dea.date, 
+	dea.population, vac.new_vaccinations
+, SUM(cast(vac.new_vaccinations as int)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+From coviddeaths dea
+Join covidvaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+where dea.continent is not null
+order by 2,3
+
+-- Using CTE to perform Calculation on Partition By in previous query
+With PopvsVac (Continent, Location, Date, Population, New_Vaccinations, RollingPeopleVaccinated)
+as
+(
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(cast(vac.new_vaccinations as int)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/population)*100
+From coviddeaths dea
+Join covidvaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+where dea.continent is not null 
+--order by 2,3
+)
+Select *, (CAST(RollingPeopleVaccinated AS numeric) / CAST(Population AS numeric))*100 as PercentPeopleVaccinated
+From PopvsVac
+
+-- Using Temp Table to perform Calculation on Partition By in previous query
+
+-- Drop table if it exist
+DROP Table if exists PercentPopulationVaccinated;
+
+CREATE TEMPORARY TABLE PercentPopulationVaccinated
+(
+Continent VARCHAR(255),
+Location VARCHAR(255),
+Date date,
+Population numeric,
+New_vaccinations numeric,
+RollingPeopleVaccinated numeric
+);
+-- Insert data into the table
+Insert into PercentPopulationVaccinated
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(cast(vac.new_vaccinations AS NUMERIC)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/population)*100
+From coviddeaths dea
+Join covidvaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date;
+-- select data with percentage calculation
+Select *, (CAST(RollingPeopleVaccinated AS numeric) / CAST(Population AS numeric))*100
+From PercentPopulationVaccinated;
+
+-- Creating View to store data for visualization
+Create View PercentPopulationVaccinated as
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(cast(vac.new_vaccinations AS NUMERIC)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+From coviddeaths dea
+Join covidvaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+where dea.continent is not null
